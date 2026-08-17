@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Nextcloud 32 auf Ubuntu 24.04 LTS
-# Installation mit Apache, MariaDB, PHP 8.3 und occ (ohne Webinstaller)
-# Ausführen: sudo bash nextcloud-complete-ubuntu24.sh
-
 set -Eeuo pipefail
 trap 'echo; echo "FEHLER in Zeile ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
@@ -237,7 +233,8 @@ SERVER_IP="$(hostname -I | awk '{print $1}')"
 
 sudo -u www-data php "${INSTALL_DIR}/occ" config:system:set trusted_domains 0 --value="localhost"
 sudo -u www-data php "${INSTALL_DIR}/occ" config:system:set trusted_domains 1 --value="${SERVER_IP}"
-sudo -u www-data php "${INSTALL_DIR}/occ" config:system:set memcache.local --value='\\OC\\Memcache\\APCu'
+phpenmod -v 8.3 -s cli,apache2 apcu
+sudo -u www-data php "${INSTALL_DIR}/occ" config:system:set memcache.local --value='\OC\Memcache\APCu'
 sudo -u www-data php "${INSTALL_DIR}/occ" background:cron
 
 # Cronjob nur einmal eintragen.
