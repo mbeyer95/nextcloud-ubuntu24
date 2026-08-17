@@ -58,13 +58,15 @@ echo
 
 # Datenbank erstellen
 echo "Datenbank wird erstellt."
-mysql_root_pw=$(openssl rand -base64 16)
 datenbankname=Nextcloud_DB
 datenbankuser=Nextcloud_User
 datenbankpw=$(openssl rand -base64 16)
-MYSQL_CMD="sudo mysql -u root -p${mysql_root_pw}"
-SQL_CMD="CREATE DATABASE \`${datenbankname}\`; GRANT ALL PRIVILEGES ON \`${datenbankname}\`.* TO '${datenbankuser}'@'localhost' IDENTIFIED BY '${datenbankpw}'; FLUSH PRIVILEGES;"
-echo $SQL_CMD | $MYSQL_CMD
+sudo mysql <<EOF
+CREATE DATABASE IF NOT EXISTS \`${datenbankname}\`;
+GRANT ALL PRIVILEGES ON \`${datenbankname}\`.* TO '${datenbankuser}'@'localhost' IDENTIFIED BY '${datenbankpw}';
+FLUSH PRIVILEGES;
+EOF
+echo "✅ Datenbank angelegt"
 
 # Apache neustarten
 echo "Apache wird neugestartet."
