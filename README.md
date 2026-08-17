@@ -1,4 +1,4 @@
-# Nextcloud Installation in Ubuntu 24
+# Nextcloud 32 Installation in Ubuntu 24
 
 1. Das Script "main.sh" mit sudo ausführen. Es wird nun automatisch Webmin und Nextcloud heruntergeladen, installiert und konfiguriert.
 2. Nach der erfolgreichen Installation die angezeigten Infos (Webadresse, Datenbank-User, Datenbank-Passwort, Datenbank-Name und Datenbank-Host) abspeichern.
