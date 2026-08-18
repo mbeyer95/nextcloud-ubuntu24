@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+# ============================================================
+# Allgemeines Nextcloud-Installationsskript für Ubuntu 24.04 LTS
+# Apache + MariaDB + PHP 8.3 + Redis + APCu + occ-Installation
+#
+# Ausführung:
+#   chmod +x nextcloud-install-generic-ubuntu24.sh
+#   sudo bash nextcloud-install-generic-ubuntu24.sh
+#
+# Das Skript ist für Neuinstallationen und unvollständige Installationen
+# ohne vollständige config.php gedacht. Eine bereits installierte Instanz
+# wird aus Sicherheitsgründen nicht überschrieben.
+# ============================================================
+
 set -Eeuo pipefail
 trap 'echo; fail "Fehler in Zeile ${LINENO}: ${BASH_COMMAND}"' ERR
 
@@ -236,6 +249,7 @@ OCC=(sudo -u www-data php "${INSTALL_DIR}/occ")
 
 "${OCC[@]}" config:system:set trusted_domains 0 --value='localhost'
 "${OCC[@]}" config:system:set trusted_domains 1 --value="${SERVER_IP}"
+"${OCC[@]}" config:system:set overwrite.cli.url --value="http://${SERVER_IP}"
 "${OCC[@]}" config:system:set memcache.local --value='\OC\Memcache\APCu'
 "${OCC[@]}" config:system:set memcache.locking --value='\OC\Memcache\Redis'
 "${OCC[@]}" config:system:set redis host --value='127.0.0.1'
@@ -280,24 +294,37 @@ systemctl is-active --quiet redis-server
 "${OCC[@]}" status
 
 CREDENTIAL_FILE="/root/nextcloud-credentials.txt"
+WEBMIN_ADDRESS="http://${SERVER_IP}:10000"
 cat > "${CREDENTIAL_FILE}" <<EOF
-Nextcloud-Adresse: http://${SERVER_IP}/
+Nextcloud-Adresse:       http://${SERVER_IP}/
 Nextcloud-Administrator: ${ADMIN_USER}
-Datenbankname: ${DB_NAME}
-Datenbankbenutzer: ${DB_USER}
-Datenbankpasswort: ${DB_PASSWORD}
-Datenverzeichnis: ${DATA_DIR}
+Nextcloud-Adminpasswort: ${ADMIN_PASSWORD}
+Datenbankname:           ${DB_NAME}
+Datenbankbenutzer:       ${DB_USER}
+Datenbankpasswort:       ${DB_PASSWORD}
+Datenverzeichnis:        ${DATA_DIR}
+Webmin-Adresse:          ${WEBMIN_ADDRESS}
+Webmin-Benutzer:         root
 EOF
 chmod 600 "${CREDENTIAL_FILE}"
-
-unset ADMIN_PASSWORD ADMIN_PASSWORD_CONFIRM DB_PASSWORD
 
 printf '\n%s============================================================%s\n' "$C_GREEN" "$C_RESET"
 printf '%s  INSTALLATION ERFOLGREICH ABGESCHLOSSEN%s\n' "$C_GREEN" "$C_RESET"
 printf '%s============================================================%s\n' "$C_GREEN" "$C_RESET"
-printf 'Adresse:      %shttp://%s/%s\n' "$C_WHITE" "$SERVER_IP" "$C_RESET"
-printf 'Anmeldedaten: %s/root/nextcloud-credentials.txt%s\n' "$C_WHITE" "$C_RESET"
+printf 'Nextcloud-Adresse:       %shttp://%s/%s\n' "$C_WHITE" "$SERVER_IP" "$C_RESET"
+printf 'Nextcloud-Administrator: %s%s%s\n' "$C_WHITE" "$ADMIN_USER" "$C_RESET"
+printf 'Nextcloud-Adminpasswort: %s%s%s\n' "$C_WHITE" "$ADMIN_PASSWORD" "$C_RESET"
+printf 'Datenbankname:           %s%s%s\n' "$C_WHITE" "$DB_NAME" "$C_RESET"
+printf 'Datenbankbenutzer:       %s%s%s\n' "$C_WHITE" "$DB_USER" "$C_RESET"
+printf 'Datenbankpasswort:       %s%s%s\n' "$C_WHITE" "$DB_PASSWORD" "$C_RESET"
+printf 'Datenverzeichnis:        %s%s%s\n' "$C_WHITE" "$DATA_DIR" "$C_RESET"
+if [[ "${INSTALL_WEBMIN}" == '1' ]]; then
+  printf 'Webmin-Adresse:          %s%s%s\n' "$C_WHITE" "$WEBMIN_ADDRESS" "$C_RESET"
+  printf 'Webmin-Benutzer:         %sroot%s\n' "$C_WHITE" "$C_RESET"
+fi
+printf 'Anmeldedaten gespeichert in: %s/root/nextcloud-credentials.txt%s\n' "$C_WHITE" "$C_RESET"
 printf 'Darstellung:  %sName, Farbe und optionaler Slogan wurden gesetzt.%s\n' "$C_WHITE" "$C_RESET"
-printf '\n%sWichtig:%s Für den öffentlichen Betrieb noch HTTPS, Firewall und Backups einrichten.\n' "$C_YELLOW" "$C_RESET"
+printf '\n%sWichtig:%s Die Zugangsdaten werden absichtlich im Terminal angezeigt.\n' "$C_YELLOW" "$C_RESET"
+printf '%sFür den öffentlichen Betrieb HTTPS, Firewall und Backups einrichten.%s\n' "$C_YELLOW" "$C_RESET"
 
 exit 0
