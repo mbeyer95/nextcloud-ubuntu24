@@ -237,64 +237,8 @@ OCC=(sudo -u www-data php "${INSTALL_DIR}/occ")
 "${OCC[@]}" config:system:set trusted_domains 0 --value='localhost'
 "${OCC[@]}" config:system:set trusted_domains 1 --value="${SERVER_IP}"
 
-PRIMARY_DOMAIN=""
-DOMAIN_INDEX=2
-PROXY_MODE=""
-
-add_domain() {
-  local domain="$1"
-  domain="$(printf '%s' "${domain}" | tr -d '[:space:]')"
-  [[ -z "${domain}" ]] && return 0
-  if [[ ! "${domain}" =~ ^[A-Za-z0-9._:-]+$ ]]; then
-    warn "Ungültige Domain/IP übersprungen: ${domain}"
-    return 0
-  fi
-  "${OCC[@]}" config:system:set trusted_domains "${DOMAIN_INDEX}" --value="${domain}"
-  ok "Trusted Domain hinzugefügt: ${domain}"
-  if [[ -z "${PRIMARY_DOMAIN}" && "${domain}" != "${SERVER_IP}" ]]; then
-    PRIMARY_DOMAIN="${domain}"
-  fi
-  DOMAIN_INDEX=$((DOMAIN_INDEX + 1))
-}
-
-read -r -p "Nginx Proxy Manager auf anderem Host verwenden? [j/N]: " PROXY_MODE
-if [[ "${PROXY_MODE,,}" == "j" || "${PROXY_MODE,,}" == "ja" ]]; then
-  read -r -p "Öffentliche HTTPS-Domain (z.B. cloud.example.de): " PROXY_DOMAIN
-  PROXY_DOMAIN="$(printf '%s' "${PROXY_DOMAIN}" | tr -d '[:space:]')"
-  [[ "${PROXY_DOMAIN}" =~ ^[A-Za-z0-9.-]+$ ]] || fail "Ungültige Proxy-Domain."
-
-  read -r -p "IP-Adresse des Nginx Proxy Managers: " PROXY_IP
-  PROXY_IP="$(printf '%s' "${PROXY_IP}" | tr -d '[:space:]')"
-  [[ "${PROXY_IP}" =~ ^[A-Fa-f0-9:.]+$ ]] || fail "Ungültige Proxy-IP-Adresse."
-
-  PRIMARY_DOMAIN="${PROXY_DOMAIN}"
-  "${OCC[@]}" config:system:set trusted_domains "${DOMAIN_INDEX}" --value="${PROXY_DOMAIN}"
-  "${OCC[@]}" config:system:set trusted_proxies 0 --value="${PROXY_IP}"
-  "${OCC[@]}" config:system:set overwritehost --value="${PROXY_DOMAIN}"
-  "${OCC[@]}" config:system:set overwriteprotocol --value='https'
-  "${OCC[@]}" config:system:set overwrite.cli.url --value="https://${PROXY_DOMAIN}"
-  PUBLIC_ADDRESS="https://${PROXY_DOMAIN}/"
-  DOMAIN_INDEX=$((DOMAIN_INDEX + 1))
-  ok "Reverse Proxy für ${PROXY_DOMAIN} konfiguriert."
-else
-  read -r -p "Erste Domain oder zusätzliche IP (optional): " DOMAIN_INPUT
-  add_domain "${DOMAIN_INPUT}"
-
-  while true; do
-    read -r -p "Weitere Domain/IP hinzufügen? [j/N]: " ADD_MORE
-    [[ "${ADD_MORE,,}" == "j" || "${ADD_MORE,,}" == "ja" ]] || break
-    read -r -p "Domain oder IP: " DOMAIN_INPUT
-    add_domain "${DOMAIN_INPUT}"
-  done
-
-  if [[ -n "${PRIMARY_DOMAIN}" ]]; then
-    "${OCC[@]}" config:system:set overwrite.cli.url --value="http://${PRIMARY_DOMAIN}"
-    PUBLIC_ADDRESS="http://${PRIMARY_DOMAIN}/"
-  else
-    "${OCC[@]}" config:system:set overwrite.cli.url --value="http://${SERVER_IP}"
-    PUBLIC_ADDRESS="http://${SERVER_IP}/"
-  fi
-fi
+"${OCC[@]}" config:system:set overwrite.cli.url --value="http://${SERVER_IP}"
+PUBLIC_ADDRESS="http://${SERVER_IP}/"
 "${OCC[@]}" config:system:set memcache.local --value='\OC\Memcache\APCu'
 "${OCC[@]}" config:system:set memcache.locking --value='\OC\Memcache\Redis'
 "${OCC[@]}" config:system:set redis host --value='127.0.0.1'
@@ -355,6 +299,7 @@ if [[ "${INSTALL_WEBMIN}" == '1' ]]; then
   printf 'Webmin-Benutzer:         %sroot%s\n' "$C_WHITE" "$C_RESET"
 fi
 printf 'Darstellung:  %sName, Farbe und optionaler Slogan wurden gesetzt.%s\n' "$C_WHITE" "$C_RESET"
+printf 'Proxy:        %sNicht in diesem Basis-Skript konfiguriert.%s\n' "$C_WHITE" "$C_RESET"
 printf '\n%sWichtig:%s Die Zugangsdaten werden nur im Terminal angezeigt.\n' "$C_YELLOW" "$C_RESET"
 printf '%sFür den öffentlichen Betrieb HTTPS, Firewall und Backups einrichten.%s\n' "$C_YELLOW" "$C_RESET"
 
