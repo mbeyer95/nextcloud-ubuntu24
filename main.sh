@@ -1,16 +1,4 @@
 #!/usr/bin/env bash
-# ============================================================
-# Allgemeines Nextcloud-Installationsskript für Ubuntu 24.04 LTS
-# Apache + MariaDB + PHP 8.3 + Redis + APCu + occ-Installation
-#
-# Ausführung:
-#   chmod +x nextcloud-install-generic-ubuntu24.sh
-#   sudo bash nextcloud-install-generic-ubuntu24.sh
-#
-# Das Skript ist für Neuinstallationen und unvollständige Installationen
-# ohne vollständige config.php gedacht. Eine bereits installierte Instanz
-# wird aus Sicherheitsgründen nicht überschrieben.
-# ============================================================
 
 set -Eeuo pipefail
 trap 'echo; fail "Fehler in Zeile ${LINENO}: ${BASH_COMMAND}"' ERR
@@ -249,7 +237,42 @@ OCC=(sudo -u www-data php "${INSTALL_DIR}/occ")
 
 "${OCC[@]}" config:system:set trusted_domains 0 --value='localhost'
 "${OCC[@]}" config:system:set trusted_domains 1 --value="${SERVER_IP}"
-"${OCC[@]}" config:system:set overwrite.cli.url --value="http://${SERVER_IP}"
+
+PRIMARY_DOMAIN=""
+DOMAIN_INDEX=2
+
+add_domain() {
+  local domain="$1"
+  domain="$(printf '%s' "${domain}" | tr -d '[:space:]')"
+  [[ -z "${domain}" ]] && return 0
+  if [[ ! "${domain}" =~ ^[A-Za-z0-9._:-]+$ ]]; then
+    warn "Ungültige Domain/IP übersprungen: ${domain}"
+    return 0
+  fi
+  "${OCC[@]}" config:system:set trusted_domains "${DOMAIN_INDEX}" --value="${domain}"
+  ok "Trusted Domain hinzugefügt: ${domain}"
+  if [[ -z "${PRIMARY_DOMAIN}" && "${domain}" != "${SERVER_IP}" ]]; then
+    PRIMARY_DOMAIN="${domain}"
+  fi
+  DOMAIN_INDEX=$((DOMAIN_INDEX + 1))
+}
+
+read -r -p "Erste Domain oder zusätzliche IP (optional): " DOMAIN_INPUT
+add_domain "${DOMAIN_INPUT}"
+while true; do
+  read -r -p "Weitere Domain/IP hinzufügen? [j/N]: " ADD_MORE
+  [[ "${ADD_MORE,,}" == "j" || "${ADD_MORE,,}" == "ja" ]] || break
+  read -r -p "Domain oder IP: " DOMAIN_INPUT
+  add_domain "${DOMAIN_INPUT}"
+done
+
+if [[ -n "${PRIMARY_DOMAIN}" ]]; then
+  "${OCC[@]}" config:system:set overwrite.cli.url --value="http://${PRIMARY_DOMAIN}"
+  PUBLIC_ADDRESS="http://${PRIMARY_DOMAIN}/"
+else
+  "${OCC[@]}" config:system:set overwrite.cli.url --value="http://${SERVER_IP}"
+  PUBLIC_ADDRESS="http://${SERVER_IP}/"
+fi
 "${OCC[@]}" config:system:set memcache.local --value='\OC\Memcache\APCu'
 "${OCC[@]}" config:system:set memcache.locking --value='\OC\Memcache\Redis'
 "${OCC[@]}" config:system:set redis host --value='127.0.0.1'
@@ -293,25 +316,12 @@ systemctl is-active --quiet mariadb
 systemctl is-active --quiet redis-server
 "${OCC[@]}" status
 
-CREDENTIAL_FILE="/root/nextcloud-credentials.txt"
 WEBMIN_ADDRESS="http://${SERVER_IP}:10000"
-cat > "${CREDENTIAL_FILE}" <<EOF
-Nextcloud-Adresse:       http://${SERVER_IP}/
-Nextcloud-Administrator: ${ADMIN_USER}
-Nextcloud-Adminpasswort: ${ADMIN_PASSWORD}
-Datenbankname:           ${DB_NAME}
-Datenbankbenutzer:       ${DB_USER}
-Datenbankpasswort:       ${DB_PASSWORD}
-Datenverzeichnis:        ${DATA_DIR}
-Webmin-Adresse:          ${WEBMIN_ADDRESS}
-Webmin-Benutzer:         root
-EOF
-chmod 600 "${CREDENTIAL_FILE}"
 
 printf '\n%s============================================================%s\n' "$C_GREEN" "$C_RESET"
 printf '%s  INSTALLATION ERFOLGREICH ABGESCHLOSSEN%s\n' "$C_GREEN" "$C_RESET"
 printf '%s============================================================%s\n' "$C_GREEN" "$C_RESET"
-printf 'Nextcloud-Adresse:       %shttp://%s/%s\n' "$C_WHITE" "$SERVER_IP" "$C_RESET"
+printf 'Nextcloud-Adresse:       %s%s%s\n' "$C_WHITE" "$PUBLIC_ADDRESS" "$C_RESET"
 printf 'Nextcloud-Administrator: %s%s%s\n' "$C_WHITE" "$ADMIN_USER" "$C_RESET"
 printf 'Nextcloud-Adminpasswort: %s%s%s\n' "$C_WHITE" "$ADMIN_PASSWORD" "$C_RESET"
 printf 'Datenbankname:           %s%s%s\n' "$C_WHITE" "$DB_NAME" "$C_RESET"
@@ -322,9 +332,8 @@ if [[ "${INSTALL_WEBMIN}" == '1' ]]; then
   printf 'Webmin-Adresse:          %s%s%s\n' "$C_WHITE" "$WEBMIN_ADDRESS" "$C_RESET"
   printf 'Webmin-Benutzer:         %sroot%s\n' "$C_WHITE" "$C_RESET"
 fi
-printf 'Anmeldedaten gespeichert in: %s/root/nextcloud-credentials.txt%s\n' "$C_WHITE" "$C_RESET"
 printf 'Darstellung:  %sName, Farbe und optionaler Slogan wurden gesetzt.%s\n' "$C_WHITE" "$C_RESET"
-printf '\n%sWichtig:%s Die Zugangsdaten werden absichtlich im Terminal angezeigt.\n' "$C_YELLOW" "$C_RESET"
+printf '\n%sWichtig:%s Die Zugangsdaten werden nur im Terminal angezeigt.\n' "$C_YELLOW" "$C_RESET"
 printf '%sFür den öffentlichen Betrieb HTTPS, Firewall und Backups einrichten.%s\n' "$C_YELLOW" "$C_RESET"
 
 exit 0
