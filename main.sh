@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -Eeuo pipefail
 trap 'echo; fail "Fehler in Zeile ${LINENO}: ${BASH_COMMAND}"' ERR
 
@@ -240,6 +239,7 @@ OCC=(sudo -u www-data php "${INSTALL_DIR}/occ")
 
 PRIMARY_DOMAIN=""
 DOMAIN_INDEX=2
+PROXY_MODE=""
 
 add_domain() {
   local domain="$1"
@@ -257,21 +257,43 @@ add_domain() {
   DOMAIN_INDEX=$((DOMAIN_INDEX + 1))
 }
 
-read -r -p "Erste Domain oder zusätzliche IP (optional): " DOMAIN_INPUT
-add_domain "${DOMAIN_INPUT}"
-while true; do
-  read -r -p "Weitere Domain/IP hinzufügen? [j/N]: " ADD_MORE
-  [[ "${ADD_MORE,,}" == "j" || "${ADD_MORE,,}" == "ja" ]] || break
-  read -r -p "Domain oder IP: " DOMAIN_INPUT
-  add_domain "${DOMAIN_INPUT}"
-done
+read -r -p "Nginx Proxy Manager auf anderem Host verwenden? [j/N]: " PROXY_MODE
+if [[ "${PROXY_MODE,,}" == "j" || "${PROXY_MODE,,}" == "ja" ]]; then
+  read -r -p "Öffentliche HTTPS-Domain (z.B. cloud.example.de): " PROXY_DOMAIN
+  PROXY_DOMAIN="$(printf '%s' "${PROXY_DOMAIN}" | tr -d '[:space:]')"
+  [[ "${PROXY_DOMAIN}" =~ ^[A-Za-z0-9.-]+$ ]] || fail "Ungültige Proxy-Domain."
 
-if [[ -n "${PRIMARY_DOMAIN}" ]]; then
-  "${OCC[@]}" config:system:set overwrite.cli.url --value="http://${PRIMARY_DOMAIN}"
-  PUBLIC_ADDRESS="http://${PRIMARY_DOMAIN}/"
+  read -r -p "IP-Adresse des Nginx Proxy Managers: " PROXY_IP
+  PROXY_IP="$(printf '%s' "${PROXY_IP}" | tr -d '[:space:]')"
+  [[ "${PROXY_IP}" =~ ^[A-Fa-f0-9:.]+$ ]] || fail "Ungültige Proxy-IP-Adresse."
+
+  PRIMARY_DOMAIN="${PROXY_DOMAIN}"
+  "${OCC[@]}" config:system:set trusted_domains "${DOMAIN_INDEX}" --value="${PROXY_DOMAIN}"
+  "${OCC[@]}" config:system:set trusted_proxies 0 --value="${PROXY_IP}"
+  "${OCC[@]}" config:system:set overwritehost --value="${PROXY_DOMAIN}"
+  "${OCC[@]}" config:system:set overwriteprotocol --value='https'
+  "${OCC[@]}" config:system:set overwrite.cli.url --value="https://${PROXY_DOMAIN}"
+  PUBLIC_ADDRESS="https://${PROXY_DOMAIN}/"
+  DOMAIN_INDEX=$((DOMAIN_INDEX + 1))
+  ok "Reverse Proxy für ${PROXY_DOMAIN} konfiguriert."
 else
-  "${OCC[@]}" config:system:set overwrite.cli.url --value="http://${SERVER_IP}"
-  PUBLIC_ADDRESS="http://${SERVER_IP}/"
+  read -r -p "Erste Domain oder zusätzliche IP (optional): " DOMAIN_INPUT
+  add_domain "${DOMAIN_INPUT}"
+
+  while true; do
+    read -r -p "Weitere Domain/IP hinzufügen? [j/N]: " ADD_MORE
+    [[ "${ADD_MORE,,}" == "j" || "${ADD_MORE,,}" == "ja" ]] || break
+    read -r -p "Domain oder IP: " DOMAIN_INPUT
+    add_domain "${DOMAIN_INPUT}"
+  done
+
+  if [[ -n "${PRIMARY_DOMAIN}" ]]; then
+    "${OCC[@]}" config:system:set overwrite.cli.url --value="http://${PRIMARY_DOMAIN}"
+    PUBLIC_ADDRESS="http://${PRIMARY_DOMAIN}/"
+  else
+    "${OCC[@]}" config:system:set overwrite.cli.url --value="http://${SERVER_IP}"
+    PUBLIC_ADDRESS="http://${SERVER_IP}/"
+  fi
 fi
 "${OCC[@]}" config:system:set memcache.local --value='\OC\Memcache\APCu'
 "${OCC[@]}" config:system:set memcache.locking --value='\OC\Memcache\Redis'
